@@ -1,4 +1,5 @@
 from terrain import Terrain
+import math
 
 class Joueur:
     def __init__(self, nom, equipe, poste, position, endurance, precision_tir, agressivite):

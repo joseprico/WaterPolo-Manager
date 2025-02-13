@@ -113,8 +113,11 @@ while running:
 
     # Si l'engagement est terminé, sortir de la boucle
     if engagement_termine:
-        break  # Passer à la suite du match plus tard
+        match.se_placer_en_attaque()
+        match.se_placer_en_defense()
+        match.update_chrono_attaque()
 
-    clock.tick(2)
+
+    clock.tick(1)
 
 pygame.quit()
