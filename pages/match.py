@@ -233,3 +233,27 @@ class Match :
             print(f"🎯 {defenseur_proche.nom} récupère le ballon et la contre-attaque commence !")
 
 
+    def passe(self, emeter : Joueur, recepteur: Joueur) : 
+        if emeter.a_le_ballon : 
+            emeter.a_le_balon = False
+
+        dx, dy = -self.ballon[0] + recepteur.position[0], -self.ballon[1] + recepteur.position[1]
+        distance = (dx**2 + dy**2) ** 0.5
+
+        if distance < 4 :
+            self.ballon = recepteur.position 
+            recepteur.a_le_ballon = True
+            return True
+        else : 
+            dx, dy = dx / distance, dy / distance  # Normalisation
+            self.ballon = (self.ballon[0] + dx * 4, self.ballon[1] + dy * 4)  # Mise à jour de la position
+            return False
+        
+
+    """def tir(self,tireur: Joueur) : 
+        dx, dy = self.ballon[0] - tireur.position[0], self.ballon[1] - tireur.position[1]
+        distance = (dx**2 + dy**2) ** 0.5
+        proba = tireur.precision_tir * (6/distance)
+        if (r.randint(0,100) > proba *100)
+"""
+
