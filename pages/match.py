@@ -1,218 +1,275 @@
-from terrain import Terrain
 from joueur import Joueur
+from ballon import Ballon
 import random as r
 import math
+import config
+import pygame
+from typing import Tuple
+import copy
+
+
+WHITE = (255, 255, 255)
+BLUE = (0, 102, 204)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+YELLOW = (255, 255, 0)
+BLACK = (0, 0, 0)
+SCREEN_WIDTH = 30 * config.longueur_terrain  # Largeur
+SCREEN_HEIGHT = 30 * config.largeur_terrain  # Hauteur
+# Facteur d'échelle pour transformer les mètres en pixels
+SCALE_X = SCREEN_WIDTH / 30  # Terrain de 30m → largeur de la fenêtre
+SCALE_Y = SCREEN_HEIGHT / 20  # Terrain de 20m → hauteur de la fenêtre
+
 
 class Match :
-    def __init__(self, equipe_A, equipe_B, JoueursA,JoueursB,Terrain):
+    def __init__(self, equipe_A, equipe_B, JoueursA,JoueursB,):
         self.domicile = equipe_A
         self.exterieur = equipe_B
         self.joueurs_dom = JoueursA
         self.joueurs_ext = JoueursB
-        self.temps_total = 480
-        self.tick_actuel = 0
-        self.terrain = Terrain
-        self.ballon = (0,0)
-        self.chrono_attaque = 15
+        self.chrono = 400
+        self.ballon = Ballon((0,0))
+        self.possesion = 0     # vaut 0 si personne, 1 si équie à dom, et -1 si équipe ext
+        self.receveur = None
+        self.emetteur = None
+        self.passe_en_cours = False
 
-    def position_depart(self):
-        """Position initiale des joueurs sur la ligne de but."""
-        base_x_ext = r.uniform(0,1)  # Ligne de but domicile
-        base_x_dom = r.uniform(self.terrain.longueur -1, self.terrain.longueur)  # Ligne de but extérieur
+    def lancement_jeu(self) :
+        self.placement_initial()
+        self.lancement_balle()
 
 
-        positions_dom = {
-            "gardien": (base_x_dom, self.terrain.largeur // 2),
-            "ailier gauche": (base_x_dom, 18),
-            "ailier droit": (base_x_dom, r.uniform(0, 2)),
-            "pointe": (base_x_dom, 12),
-            "demi gauche": (base_x_dom, 16),
-            "demi droit": (base_x_dom, 5),
-            "défenseur pointe": (base_x_dom, 8)
-        }
+        pygame.init()
 
-        # Positionnement des joueurs extérieur
-        positions_ext = {
-            "gardien": (base_x_ext, self.terrain.largeur // 2),
-            "ailier gauche": (base_x_ext, r.uniform(0, 2)),
-            "ailier droit": (base_x_ext, 18),
-            "pointe": (base_x_ext,12),
-            "demi gauche": (base_x_ext,5),
-            "demi droit": (base_x_ext, 16),
-            "défenseur pointe": (base_x_ext, 8)
-        }
+        # Dimensions de la fenêtre (proportionnelles au terrain FINA 30m x 20m)
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Simulation de Water-Polo")
 
-        # Attribution des positions aux joueurs domicile
+        # Boucle de jeu
+        running = True
+        clock = pygame.time.Clock()
+        self.afficher_terrain(screen)
+
+
+        while running:
+            # Gestion des événements (fermeture de la fenêtre)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+            for joueur in self.joueurs_dom :
+                self.action(joueur, self.joueurs_dom)
+            for joueur in self.joueurs_ext :
+                self.action(joueur,self.joueurs_ext)
+            self.afficher_terrain(screen)
+            #self.update_chrono_attaque()
+
+            clock.tick(config.ticks*config.vitesse_du_jeu)
+
+        pygame.quit()
+
+    def afficher_terrain(self,screen):
+
+
+        """Affiche le terrain, les lignes, les joueurs et le ballon"""
+        screen.fill(BLUE)  # Fond bleu pour l'eau
+
+        # Dessiner les cages
+        cage_width = 2 * SCALE_X
+        cage_height = config.taille_but * SCALE_Y
+        pygame.draw.rect(screen, WHITE, (0, (SCREEN_HEIGHT - cage_height) // 2, cage_width, cage_height))
+        pygame.draw.rect(screen, WHITE, (SCREEN_WIDTH - cage_width, (SCREEN_HEIGHT - cage_height) // 2, cage_width, cage_height))
+
+        pygame.draw.line(screen, RED, (2 * SCALE_X, 0), (2 * SCALE_X, SCREEN_HEIGHT), 2)
+        pygame.draw.line(screen, RED, ((config.longueur_terrain - 2) * SCALE_X, 0), ((config.longueur_terrain - 2) * SCALE_X, SCREEN_HEIGHT), 2)
+
+        pygame.draw.line(screen, YELLOW, (5 * SCALE_X, 0), (5 * SCALE_X, SCREEN_HEIGHT), 2)
+        pygame.draw.line(screen, YELLOW, ((config.longueur_terrain - 5) * SCALE_X, 0), ((config.longueur_terrain - 5) * SCALE_X, SCREEN_HEIGHT), 2)
+
+        pygame.draw.line(screen, GREEN, (6 * SCALE_X, 0), (6 * SCALE_X, SCREEN_HEIGHT), 2)
+        pygame.draw.line(screen, GREEN, ((config.longueur_terrain - 6) * SCALE_X, 0), ((config.longueur_terrain - 6) * SCALE_X, SCREEN_HEIGHT), 2)
+
+        pygame.draw.line(screen, WHITE, (config.longueur_terrain/2 * SCALE_X, 0), (config.longueur_terrain/2 * SCALE_X, SCREEN_HEIGHT), 2)
+
+        # Dessiner les joueurs
         for joueur in self.joueurs_dom:
-            if joueur.poste in positions_dom:
-                joueur.position = positions_dom[joueur.poste]
-                print(joueur.position)
-
-        # Attribution des positions aux joueurs extérieur
-        for joueur in self.joueurs_ext:
-            if joueur.poste in positions_ext:
-                joueur.position = positions_ext[joueur.poste]
-                print(joueur.position)
-
-
-    """def engagement_quart_temps(self):
-        aillier_dom = next((j for j in self.joueurs_dom if j.poste == "ailier droit"),None)
-        aillier_ext = next((j for j in self.joueurs_ext if j.poste == "ailier gauche"),None)
-        print("info")
-        print(aillier_dom.nom)
-        print(aillier_ext.nom)
-        self.ballon = (self.terrain.longueur//2,1)
-        x,y = self.ballon
-        print(x,y)
-        while (self.joueur_en_possession(aillier_dom) == False and self.joueur_en_possession(aillier_ext) == False):
-            aillier_dom.se_deplacer_vers(x,y,1)
-            aillier_ext.se_deplacer_vers(x,y,2)
-            print(aillier_dom.position)
-            print(aillier_ext.position)
-            for joueur in joueurs_dom :
-                if(joueur != aillier_dom):
-                    x,y = joueur.position
-                    joueur.se_deplacer_vers(terrain.longueur//2,y)
-            for joueur in joueurs_ext :
-                if(joueur != aillier_ext):
-                    x,y = joueur.position
-                    joueur.se_deplacer_vers(terrain.longueur//2,y)"""
-
-    def engagement_quart_temps(self):
-        """Initialise l'engagement et place les joueurs au bon endroit"""
-        self.engagement_en_cours = True
-        self.ballon = (self.terrain.longueur // 2,1)  # Ballon au centre du terrain
-
-        # Sélection des joueurs en course pour l'engagement
-        aillier_dom = next((j for j in self.joueurs_dom if j.poste == "ailier droit"), None)
-        aillier_ext = next((j for j in self.joueurs_ext if j.poste == "ailier gauche"), None)
-
-        print("Engagement - Joueurs en course :")
-        print(f"{aillier_dom.nom} vs {aillier_ext.nom}")
-        return aillier_dom,aillier_ext
-
-
-    def update_engagement(self,aillier_dom,aillier_ext):
-        """Met à jour les positions des joueurs pendant l'engagement et vérifie la possession"""
-        if not self.engagement_en_cours:
-            return True  # Engagement déjà terminé
-
-        x, y = self.ballon  # Position du ballon
-
-        # Déplacement des joueurs en course vers le ballon
-        aillier_dom.se_deplacer_vers(x, y, 2)
-        aillier_ext.se_deplacer_vers(x, y, 1)
-
-
-
-        # Déplacement des autres joueurs vers le centre du terrain
-        for joueur in self.joueurs_dom:
-            if joueur != aillier_dom and joueur.poste !="gardien":
-                jx, jy = joueur.position
-                joueur.se_deplacer_vers(self.terrain.longueur // 2, jy,1)
+            x, y = joueur.position
+            pygame.draw.circle(screen, RED, (int(x * SCALE_X), int(y * SCALE_Y)), 7)  # Rouge = Équipe domicile
 
         for joueur in self.joueurs_ext:
-            if joueur != aillier_ext and joueur.poste !="gardien":
-                jx, jy = joueur.position
-                joueur.se_deplacer_vers(self.terrain.longueur // 2, jy,1)
+            x, y = joueur.position
+            pygame.draw.circle(screen, YELLOW, (int(x * SCALE_X), int(y * SCALE_Y)), 7)  # Jaune = Équipe extérieure
 
-        # Vérifier la possession du ballon
-        if aillier_dom.position == self.ballon or aillier_ext.position == self.ballon:
-            if aillier_dom.position == self.ballon:
-                aillier_dom.a_le_ballon = True
-            else:
-                aillier_ext.a_le_ballon = True
-            self.engagement_en_cours = False  # L'engagement est terminé
-            print("Engagement terminé !")
+        # Dessiner le ballon
+        bx, by = self.ballon.position
+        pygame.draw.circle(screen, WHITE, (int(bx * SCALE_X), int(by * SCALE_Y)), 3)
+
+        pygame.display.flip()
+
+    def placement_initial(self) :
+
+        for joueur in self.joueurs_dom :
+            joueur.position = Match.position_aleatoire(config.positions_dom[joueur.poste])
+        for joueur in self.joueurs_ext :
+            joueur.position = Match.position_aleatoire(config.positions_ext[joueur.poste])
+
+    def lancement_balle(self):
+        self.ballon.position =  Match.position_aleatoire((config.longueur_terrain//2, 1),0.2)
+
+    def position_aleatoire(position: Tuple[float, float], facteur = config.fact_alea_pos) -> Tuple[float, float]:
+        dx,dy = r.uniform(-1,1),+ r.uniform(-1,1)
+        distance = (dx**2 + dy**2)**0.5 / facteur
+        dx,dy = dx / distance, dy/distance
+        return position[0] + dx, position[1]+dy
+
+    def distance_ballon(self, joueur : Joueur) -> float:
+
+        distance = ((self.ballon.position[0] - joueur.position[0])**2 + (self.ballon.position[1] - joueur.position[1])**2)**0.5
+        return distance
+
+    def recup_ballon(self, joueur : Joueur) :
+        if (self.distance_ballon(joueur) < 0.25 or joueur.a_le_ballon == True) and (joueur!= self.emetteur):
+            joueur.a_le_ballon = True
+            if joueur in self.joueurs_dom :
+                self.possesion = 1
+            else :
+                self.possesion = -1
+            self.ballon.position = joueur.position
+
+    def action(self, joueur : Joueur, joueurs : list[Joueur]) :
+        if self.possesion == 0 :
+            self.recup_ballon(joueur)
+            if self.passe_en_cours :
+                self.passe_en_cours = self.passe(self.emetteur, self.receveur)
+                if self.passe_en_cours == False :
+                    self.receveur = None
+                    self.emetteur = None
+
+            if min([self.distance_ballon(j) for j in joueurs]) == self.distance_ballon(joueur) :
+                joueur.mouvement_vers(self.ballon.position)
+            else :
+                joueur.mouvement_vers((self.ballon.position[0],joueur.position[1]))
+        if self.possesion == 1 or self.possesion == -1 :
+            choix = self.choix_joueur(joueur)
+            if choix == 1 :
+                self.emetteur = joueur
+                self.passe_en_cours = self.passe(self.emetteur,self.receveur)
+                self.possesion = 0
+            else :
+                #joueur.mouvement_vers((13*-self.possesion+15,joueur.position[1]))
+                cible = self.cible_attaque(joueur)
+                if joueur.poste != "gardien" :
+                    joueur.mouvement_vers(cible)
+                if joueur.a_le_ballon :
+                    self.ballon.position = joueur.position
+
+
+
+    def cible_attaque(self,joueur):
+        position_arrondie = (round(joueur.position[0]),round(joueur.position[1]))
+
+        if joueur.poste == "pointe" :
+            if position_arrondie != (config.formations["pointe"][0] * -self.possesion + 15, config.formations["pointe"][1]) :
+                return (config.formations["pointe"][0] * -self.possesion + 15, config.formations["pointe"][1])
+            else :
+                return Match.position_aleatoire((config.formations["pointe"][0] * -self.possesion + 15, config.formations["pointe"][1]),6)
+            return (config.formations["pointe"][0] * -self.possesion + 15,config.formations["pointe"][1])
+        elif joueur.poste in config.formations:
+            if joueur in self.joueurs_dom :
+                joueurs = copy.deepcopy(self.joueurs_dom)
+            else :
+                joueurs = copy.deepcopy(self.joueurs_ext)
+            formation = copy.deepcopy(config.formations)
+            for cible_joueur in formation :
+
+                if cible_joueur != "pointe" :
+                    joueur_plus_proche = min(joueurs, key=lambda joueur: joueur.distance_au_point(config.formations[cible_joueur][0]* -self.possesion + 15,config.formations[cible_joueur][1]))
+                    if joueur.position == joueur_plus_proche.position :
+                        if position_arrondie != (config.formations[cible_joueur][0] * -self.possesion + 15, config.formations[cible_joueur][1]) :
+                            return (config.formations[cible_joueur][0] * -self.possesion + 15, config.formations[cible_joueur][1])
+                        else :
+                            return Match.position_aleatoire((config.formations[cible_joueur][0] * -self.possesion + 15, config.formations[cible_joueur][1]),6)
+                    else :
+                        #del formation[cible_joueur]
+                        joueurs.remove(joueur_plus_proche)
+            else :
+                return (self.ballon.position[0],7)
+
+
+
+    def choix_joueur(self, joueur: Joueur):
+        """Détermine l'action du joueur en possession du ballon (passe, tir ou avancer)."""
+        if not joueur.a_le_ballon:
+            return 0
+
+        # Récupérer les coéquipiers et défenseurs
+        equipe = self.joueurs_dom if joueur in self.joueurs_dom else self.joueurs_ext
+        adversaires = self.joueurs_ext if joueur in self.joueurs_dom else self.joueurs_dom
+
+        # Vérifier les options de passe
+        receveurs_potentiels = []
+        for coequipier in equipe:
+            if coequipier.poste != "gardien" :
+                if coequipier == joueur or coequipier.a_le_ballon:
+                    continue
+
+                distance_coequipier = joueur.distance_au_joueur(coequipier)
+                defenseur_plus_proche = min(adversaires, key=lambda d: d.distance_au_joueur(coequipier))
+                distance_defenseur = defenseur_plus_proche.distance_au_joueur(coequipier)
+
+                if distance_defenseur > 0.7 and coequipier.mieux_placé(joueur) and distance_coequipier<13:
+                    if coequipier.poste == "pointe":
+                        if 0 <= coequipier.position[0] <= 5:
+                            receveurs_potentiels.append((coequipier, distance_coequipier, distance_defenseur))
+                    else :
+                        receveurs_potentiels.append((coequipier, distance_coequipier, distance_defenseur))
+
+        if receveurs_potentiels:
+            receveurs_potentiels.sort(key=lambda x: (x[1]))   #et proximité
+            self.receveur = receveurs_potentiels[0][0]
+            print(f" {joueur.nom} passe à {self.receveur.nom} !")
+            return 1
+        else :
+            return 0
+
+    def position_gardien_adverse(self, joueur):
+        if joueur in self.joueurs_dom:
+            for j in self.joueurs_ext:
+                if j.poste == "gardien":
+                    return j.position[0]
+        elif joueur in self.joueurs_ext:
+            for j in self.joueurs_dom:
+                if j.poste == "gardien":
+                    return j.position
+        else :
+            return config.longueur_terrain // 2  # Retourne None si aucun gardien n'est trouvé
+
+    def passe(self, emetteur, recepteur) :
+        if emetteur.a_le_ballon :
+            emetteur.a_le_ballon = False
+
+
+        dx, dy =  (recepteur.position[0]-self.ballon.position[0]), (recepteur.position[1]-self.ballon.position[1])
+        distance = (dx**2 + dy**2) ** 0.5
+
+        if distance < 0.75 :
+            self.ballon.position = recepteur.position
+            recepteur.a_le_ballon = True
+            return False
+        else :
+            dx, dy = dx / distance, dy / distance  # Normalisation
+            self.ballon.position = (self.ballon.position[0] + dx * 0.01, self.ballon.position[1] + dy * 0.01)  # Mise à jour de la position
             return True
 
-        return False
-
-    def equipe_en_possession(self,equipe):
-        rep = False
-        for joueur in equipe :
-            if(joueur.a_le_ballon == True):
-                rep = True
-        return rep
-
-
-
-    def se_placer_en_attaque(self):
-        if self.equipe_en_possession(self.joueurs_ext) == True:
-            formations = {
-                "ailier gauche": (r.uniform(self.terrain.longueur-3,self.terrain.longueur-2),r.uniform(2,3)),
-                "ailier droit": (r.uniform(self.terrain.longueur-3,self.terrain.longueur-2),r.uniform(17,18)),
-                "pointe": (r.uniform(self.terrain.longueur-3,self.terrain.longueur-2), r.uniform(9,11)),
-                "demi gauche": (r.uniform(self.terrain.longueur-7,self.terrain.longueur-6), r.uniform(5,6)),
-                "demi droit": (r.uniform(self.terrain.longueur-7,self.terrain.longueur-6),r.uniform(16,17)),
-                "défenseur pointe": (r.uniform(self.terrain.longueur-9,self.terrain.longueur-7), r.uniform(9,11))
-            }
-            joueurs_en_attaque = self.joueurs_ext
-
-        else :
-
-            formations = {
-                "ailier gauche": (r.uniform(2,3),r.uniform(17,18)),
-                "ailier droit": (r.uniform(2,3), r.uniform(2,3)),
-                "pointe": (r.uniform(2,3),  r.uniform(9,11)),
-                "demi droit": (r.uniform(6,7),  r.uniform(5,6)),
-                "demi gauche": (r.uniform(6,7),r.uniform(16,17)),
-                "défenseur pointe": (r.uniform(7,9), r.uniform(9,11))
-            }
-            joueurs_en_attaque = self.joueurs_dom
-
-        for joueur in joueurs_en_attaque :
-            if joueur.poste in formations:
-                cible_x, cible_y = formations[joueur.poste]
-                avait_le_ballon = joueur.a_le_ballon
-                joueur.se_deplacer_vers(cible_x, cible_y,2)
-                if avait_le_ballon :
-                    self.ballon = joueur.position
-
-
-
-    def se_placer_en_defense(self):
-        """Chaque défenseur suit son adversaire respectif selon la stratégie définie."""
-        if self.equipe_en_possession(self.joueurs_ext):
-            joueurs_defenseurs = self.joueurs_dom  # Équipe domicile en défense
-            joueurs_attaquants = self.joueurs_ext  # Équipe extérieure en attaque
-        else:
-            joueurs_defenseurs = self.joueurs_ext  # Équipe extérieure en défense
-            joueurs_attaquants = self.joueurs_dom  # Équipe domicile en attaque
-
-        # Définition des correspondances défensives
-        correspondances = {
-            "ailier gauche": "demi droit",
-            "ailier droit": "demi gauche",
-            "demi gauche": "ailier droit",
-            "demi droit": "ailier gauche",
-            "pointe": "défenseur pointe",
-            "défenseur pointe": "pointe"
-        }
-
-        # Assigner chaque défenseur à son attaquant
-        for defenseur in joueurs_defenseurs:
-            if defenseur.poste in correspondances:  # Vérifier que le poste a une correspondance
-                adversaire_poste = correspondances[defenseur.poste]
-
-                # Trouver l'adversaire correspondant
-                adversaire = next((j for j in joueurs_attaquants if j.poste == adversaire_poste), None)
-                decalage_x = r.uniform(-0.5, 0.5)
-                decalage_y = r.uniform(-0.5, 0.5)
-                if adversaire:
-                    # Déplacement du défenseur vers son adversaire
-                    defenseur.se_deplacer_vers(adversaire.position[0] + decalage_x,adversaire.position[1] + decalage_y, 2)
-
-    def update_chrono_attaque(self):
-        """Met à jour le chrono d'attaque et force un changement de possession si 0"""
-        if self.chrono_attaque > 0:
-            self.chrono_attaque -= 1
+    """def update_chrono_attaque(self):
+        Met à jour le chrono d'attaque et force un changement de possession si 0
+        if self.chrono > 0:
+            self.chrono -= 1
         else:
             print("⏳ Temps d'attaque écoulé ! Changement de possession.")
             self.transferer_possession()
 
     def transferer_possession(self):
-        """Donne le ballon au défenseur le plus proche de l'attaquant"""
+        Donne le ballon au défenseur le plus proche de l'attaquant
         joueur_actuel = next((j for j in self.joueurs_dom + self.joueurs_ext if j.a_le_ballon), None)
 
         if joueur_actuel:
@@ -229,31 +286,8 @@ class Match :
             # Nouveau porteur du ballon
             defenseur_proche.a_le_ballon = True
             self.ballon = defenseur_proche.position
-            self.chrono_attaque = 30  # Réinitialisation du chrono pour la nouvelle équipe
-            print(f"🎯 {defenseur_proche.nom} récupère le ballon et la contre-attaque commence !")
+            self.chrono = 30  # Réinitialisation du chrono pour la nouvelle équipe
+            print(f"🎯 {defenseur_proche.nom} récupère le ballon et la contre-attaque commence !")"""
 
 
-    def passe(self, emeter : Joueur, recepteur: Joueur) : 
-        if emeter.a_le_ballon : 
-            emeter.a_le_balon = False
-
-        dx, dy = -self.ballon[0] + recepteur.position[0], -self.ballon[1] + recepteur.position[1]
-        distance = (dx**2 + dy**2) ** 0.5
-
-        if distance < 4 :
-            self.ballon = recepteur.position 
-            recepteur.a_le_ballon = True
-            return True
-        else : 
-            dx, dy = dx / distance, dy / distance  # Normalisation
-            self.ballon = (self.ballon[0] + dx * 4, self.ballon[1] + dy * 4)  # Mise à jour de la position
-            return False
-        
-
-    """def tir(self,tireur: Joueur) : 
-        dx, dy = self.ballon[0] - tireur.position[0], self.ballon[1] - tireur.position[1]
-        distance = (dx**2 + dy**2) ** 0.5
-        proba = tireur.precision_tir * (6/distance)
-        if (r.randint(0,100) > proba *100)
-"""
 
