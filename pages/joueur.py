@@ -83,21 +83,20 @@ class Joueur:
     ################################################""
 
     def mieux_placé(self, joueur):
-        # Poids pour l'axe X (proximité du but adverse)
-        poids_x = 0.6  # Moins important
+        tolerence = 5
+
+        poids_x = 0.8  # Moins important
         distance_but_self = abs(self.position[0] - config.longueur_terrain)
         distance_but_joueur = abs(joueur.position[0] - config.longueur_terrain)
 
-        # Poids pour l'axe Y (être au centre est plus important)
         poids_y = 1.2  # Plus important
         distance_centre_self = (1/abs(self.position[1] - config.largeur_terrain / 2))*100
         distance_centre_joueur = (1/abs(joueur.position[1] - config.largeur_terrain / 2))*100
 
-        # Score basé sur les pondérations
         score_self = poids_x * distance_but_self + poids_y * distance_centre_self
         score_joueur = poids_x * distance_but_joueur + poids_y * distance_centre_joueur
 
-        return score_self > score_joueur
+        return score_self > score_joueur +tolerence
 
     def mouvement_vers(self, cible : tuple[float,float]) :
 

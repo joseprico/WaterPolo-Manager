@@ -33,6 +33,8 @@ class Match :
         self.receveur = None
         self.emetteur = None
         self.passe_en_cours = False
+        self.delai_passe = 0
+        self.possession_precedente =0
 
     def lancement_jeu(self) :
         self.placement_initial()
@@ -148,51 +150,135 @@ class Match :
                 joueur.mouvement_vers(self.ballon.position)
             else :
                 joueur.mouvement_vers((self.ballon.position[0],joueur.position[1]))
-        if self.possesion == 1 or self.possesion == -1 :
-            choix = self.choix_joueur(joueur)
-            if choix == 1 :
-                self.emetteur = joueur
-                self.passe_en_cours = self.passe(self.emetteur,self.receveur)
-                self.possesion = 0
-            else :
-                #joueur.mouvement_vers((13*-self.possesion+15,joueur.position[1]))
-                cible = self.cible_attaque(joueur)
-                if joueur.poste != "gardien" :
-                    joueur.mouvement_vers(cible)
-                if joueur.a_le_ballon :
-                    self.ballon.position = joueur.position
-
-
-
-    def cible_attaque(self,joueur):
-        position_arrondie = (round(joueur.position[0]),round(joueur.position[1]))
-
-        if joueur.poste == "pointe" :
-            if position_arrondie != (config.formations["pointe"][0] * -self.possesion + 15, config.formations["pointe"][1]) :
-                return (config.formations["pointe"][0] * -self.possesion + 15, config.formations["pointe"][1])
-            else :
-                return Match.position_aleatoire((config.formations["pointe"][0] * -self.possesion + 15, config.formations["pointe"][1]),6)
-            return (config.formations["pointe"][0] * -self.possesion + 15,config.formations["pointe"][1])
-        elif joueur.poste in config.formations:
+        if self.possesion != self.possession_precedente and self.passe_en_cours == False:
+            self.reinitialiser_affectations()
+            self.possession_precedente = self.possesion
+        if self.possesion == 1:
             if joueur in self.joueurs_dom :
-                joueurs = copy.deepcopy(self.joueurs_dom)
+                choix = self.choix_joueur(joueur)
+                if choix == 1 :
+                    self.delai_passe = 30
+                    self.emetteur = joueur
+                    self.passe_en_cours = self.passe(self.emetteur,self.receveur)
+                    self.possesion = 0
+                else :
+                    if joueur.poste != "gardien" :
+                        cible = self.cible_attaque(joueur)
+                        joueur.mouvement_vers(cible)
+                        if joueur.a_le_ballon :
+                            self.ballon.position = joueur.position
             else :
-                joueurs = copy.deepcopy(self.joueurs_ext)
-            formation = copy.deepcopy(config.formations)
-            for cible_joueur in formation :
+                if joueur.poste !="gardien":
+                    cible = self.defense(joueur)
+                    joueur.mouvement_vers(cible)
+        elif self.possesion == -1 :
+            if joueur in self.joueurs_ext :
+                choix = self.choix_joueur(joueur)
+                if choix == 1 :
+                    self.delai_passe = 30
+                    self.emetteur = joueur
+                    self.passe_en_cours = self.passe(self.emetteur,self.receveur)
+                    self.possesion = 0
+                else :
+                    if joueur.poste != "gardien" :
+                        cible = self.cible_attaque(joueur)
+                        joueur.mouvement_vers(cible)
+                        if joueur.a_le_ballon :
+                            self.ballon.position = joueur.position
+            else :
+                if joueur.poste !="gardien":
+                    cible = self.defense(joueur)
+                    joueur.mouvement_vers(cible)
 
-                if cible_joueur != "pointe" :
-                    joueur_plus_proche = min(joueurs, key=lambda joueur: joueur.distance_au_point(config.formations[cible_joueur][0]* -self.possesion + 15,config.formations[cible_joueur][1]))
-                    if joueur.position == joueur_plus_proche.position :
-                        if position_arrondie != (config.formations[cible_joueur][0] * -self.possesion + 15, config.formations[cible_joueur][1]) :
-                            return (config.formations[cible_joueur][0] * -self.possesion + 15, config.formations[cible_joueur][1])
-                        else :
-                            return Match.position_aleatoire((config.formations[cible_joueur][0] * -self.possesion + 15, config.formations[cible_joueur][1]),6)
-                    else :
-                        #del formation[cible_joueur]
-                        joueurs.remove(joueur_plus_proche)
-            else :
-                return (self.ballon.position[0],7)
+        """equipe = self.joueurs_dom if joueur in self.joueurs_dom else self.joueurs_ext
+        adversaires = self.joueurs_ext if joueur in self.joueurs_dom else self.joueurs_dom
+        but_dom = (config.longueur_terrain, config.largeur_terrain/2)
+        but_ext = (0, config.largeur_terrain/2)
+        but = but_dom if joueur in self.joueurs_dom else but_ext
+        # Dictionnaire pour stocker les adversaires déjà attribués
+        if not hasattr(self, 'marquages'):
+            self.marquages = {}
+
+        # Cas spécifique pour le défenseur pointe
+        if joueur.poste == "défenseur pointe":
+            for j in adversaires:
+                if j.poste == "pointe":
+                    self.marquages[joueur] = j  # Assignation unique
+                    return self.placer_entre(j.position,but,0.90)
+
+        # Filtrer les adversaires déjà pris
+        adversaires_disponibles = [j for j in adversaires if j.poste != "gardien" and j.poste != "pointe"and j not in self.marquages.values()]
+
+        # Si plus d'adversaires disponibles, on prend le plus proche
+        if adversaires_disponibles:
+            adversaire = min(adversaires_disponibles, key=lambda j: joueur.distance_au_joueur(j))
+            self.marquages[joueur] = adversaire  # On assigne cet adversaire au joueur
+            return self.placer_entre(adversaire.position,but,0.85)
+
+        # Si tous les adversaires sont déjà assignés, on ne change rien
+        if joueur in self.marquages:
+            return self.placer_entre(self.marquages[joueur].position,but,0.85)
+
+        return (0,0)  # Si aucun adversaire n'est disponible"""
+
+    def cible_attaque(self, joueur):
+        position_arrondie = (round(joueur.position[0]), round(joueur.position[1]))
+        if joueur in self.joueurs_dom :
+            equipe = self.joueurs_dom
+        else :
+            equipe = self.joueurs_ext
+        for j in equipe :
+            if j.poste == "gardien" :
+                equipe.remove(j)
+        if not hasattr(self, 'affectations') or len(self.affectations) == 0:
+            self.reinitialiser_affectations()
+
+        for player in equipe :
+            if player.poste == "pointe":
+                self.affectations[player] = (config.formations["pointe"][0], config.formations["pointe"][1])
+
+
+        for poste, position in self.position_disponible.items():
+            joueurs_non_places = [j for j in equipe if j not in self.affectations]
+            if not joueurs_non_places:
+                break
+
+            joueur_plus_proche = min(joueurs_non_places, key=lambda j: j.distance_au_point(position[0],position[1]))
+            self.affectations[joueur_plus_proche] = position
+            print(f"[Affectation] {joueur_plus_proche.nom} ({joueur_plus_proche.poste}) → {poste}")
+        if joueur in self.affectations:
+            if position_arrondie != (self.affectations[joueur][0]* -self.possesion + 15,self.affectations[joueur][1]) :
+                return (self.affectations[joueur][0]* -self.possesion + 15,self.affectations[joueur][1])
+            elif (joueur.poste != "pointe") and (joueur.distance_au_point(self.ballon.position[0],self.ballon.position[1])<10):
+                return Match.position_aleatoire((self.affectations[joueur][0]* -self.possesion + 15,self.affectations[joueur][1]),2)
+
+
+
+        return joueur.position  # Si aucune position trouvée, le joueur reste en place
+
+
+    def reinitialiser_affectations(self):
+        self.position_disponible = {poste: pos for poste, pos in config.formations.items() if poste != "pointe"}
+        self.affectations = {}
+
+
+
+
+
+
+    """formation = copy.deepcopy(config.formations)
+            for cible_joueur in formation:
+                if cible_joueur != "pointe":
+                    joueur_plus_proche = min(joueurs,key=lambda joueur: joueur.distance_au_point(config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1]))
+                    if joueur.position == joueur_plus_proche.position:
+                        if position_arrondie != (config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1]):
+                            return (config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1])
+                        else:
+                            return Match.position_aleatoire((config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1]), 6)
+                    joueurs.remove(joueur_plus_proche)
+
+        raise ValueError(f"Aucune cible trouvée pour {joueur.nom} (poste: {joueur.poste}). Vérifie la formation.")"""
+
 
 
 
@@ -206,29 +292,33 @@ class Match :
         adversaires = self.joueurs_ext if joueur in self.joueurs_dom else self.joueurs_dom
 
         # Vérifier les options de passe
-        receveurs_potentiels = []
-        for coequipier in equipe:
-            if coequipier.poste != "gardien" :
-                if coequipier == joueur or coequipier.a_le_ballon:
-                    continue
+        if self.delai_passe == 0 :
+            receveurs_potentiels = []
+            for coequipier in equipe:
+                if coequipier.poste != "gardien" :
+                    if coequipier == joueur or coequipier.a_le_ballon:
+                        continue
 
-                distance_coequipier = joueur.distance_au_joueur(coequipier)
-                defenseur_plus_proche = min(adversaires, key=lambda d: d.distance_au_joueur(coequipier))
-                distance_defenseur = defenseur_plus_proche.distance_au_joueur(coequipier)
+                    distance_coequipier = joueur.distance_au_joueur(coequipier)
+                    defenseur_plus_proche = min(adversaires, key=lambda d: d.distance_au_joueur(coequipier))
+                    distance_defenseur = defenseur_plus_proche.distance_au_joueur(coequipier)
 
-                if distance_defenseur > 0.7 and coequipier.mieux_placé(joueur) and distance_coequipier<13:
-                    if coequipier.poste == "pointe":
-                        if 0 <= coequipier.position[0] <= 5:
+                    if (distance_defenseur > 1 and coequipier.mieux_placé(joueur)) or (distance_defenseur >3 and abs(coequipier.position[0] - config.longueur_terrain) < abs(joueur.position[0] - config.longueur_terrain)) :
+                        if coequipier.poste == "pointe":
+                            if (self.possesion == 1 and 25 <= coequipier.position[0] <= 28) or (self.possesion == -1 and 2 <= coequipier.position[0] <= 5) :
+                                receveurs_potentiels.append((coequipier, distance_coequipier, distance_defenseur))
+                        else :
                             receveurs_potentiels.append((coequipier, distance_coequipier, distance_defenseur))
-                    else :
-                        receveurs_potentiels.append((coequipier, distance_coequipier, distance_defenseur))
 
-        if receveurs_potentiels:
-            receveurs_potentiels.sort(key=lambda x: (x[1]))   #et proximité
-            self.receveur = receveurs_potentiels[0][0]
-            print(f" {joueur.nom} passe à {self.receveur.nom} !")
-            return 1
+            if receveurs_potentiels:
+                receveurs_potentiels.sort(key=lambda x: (x[1]))   #et proximité
+                self.receveur = receveurs_potentiels[0][0]
+                #print(f" {joueur.nom} passe à {self.receveur.nom} !")
+                return 1
+            else :
+                return 0
         else :
+            self.delai_passe-=1
             return 0
 
     def position_gardien_adverse(self, joueur):
@@ -257,8 +347,9 @@ class Match :
             return False
         else :
             dx, dy = dx / distance, dy / distance  # Normalisation
-            self.ballon.position = (self.ballon.position[0] + dx * 0.01, self.ballon.position[1] + dy * 0.01)  # Mise à jour de la position
+            self.ballon.position = (self.ballon.position[0] + dx * 0.02, self.ballon.position[1] + dy * 0.02)  # Mise à jour de la position
             return True
+
 
     """def update_chrono_attaque(self):
         Met à jour le chrono d'attaque et force un changement de possession si 0
@@ -288,6 +379,45 @@ class Match :
             self.ballon = defenseur_proche.position
             self.chrono = 30  # Réinitialisation du chrono pour la nouvelle équipe
             print(f"🎯 {defenseur_proche.nom} récupère le ballon et la contre-attaque commence !")"""
+
+
+    def defense(self, joueur):
+        equipe = self.joueurs_dom if joueur in self.joueurs_dom else self.joueurs_ext
+        adversaires = self.joueurs_ext if joueur in self.joueurs_dom else self.joueurs_dom
+        but_dom = (config.longueur_terrain, config.largeur_terrain/2)
+        but_ext = (0, config.largeur_terrain/2)
+        but = but_dom if joueur in self.joueurs_dom else but_ext
+        # Dictionnaire pour stocker les adversaires déjà attribués
+        if not hasattr(self, 'marquages'):
+            self.marquages = {}
+
+        # Cas spécifique pour le défenseur pointe
+        if joueur.poste == "défenseur pointe":
+            for j in adversaires:
+                if j.poste == "pointe":
+                    self.marquages[joueur] = j  # Assignation unique
+                    return self.placer_entre(j.position,but,0.90)
+
+        # Filtrer les adversaires déjà pris
+        adversaires_disponibles = [j for j in adversaires if j.poste != "gardien" and j.poste != "pointe"and j not in self.marquages.values()]
+
+        # Si plus d'adversaires disponibles, on prend le plus proche
+        if adversaires_disponibles:
+            adversaire = min(adversaires_disponibles, key=lambda j: joueur.distance_au_joueur(j))
+            self.marquages[joueur] = adversaire  # On assigne cet adversaire au joueur
+            return self.placer_entre(adversaire.position,but,0.85)
+
+        # Si tous les adversaires sont déjà assignés, on ne change rien
+        if joueur in self.marquages:
+            return self.placer_entre(self.marquages[joueur].position,but,0.85)
+
+        return (0,0)  # Si aucun adversaire n'est disponible
+
+    def placer_entre(self, adversaire_pos, but_pos, facteur):
+
+        x = but_pos[0] + facteur * (adversaire_pos[0] - but_pos[0])
+        y = but_pos[1] + facteur * (adversaire_pos[1] - but_pos[1])
+        return (x, y)
 
 
 
