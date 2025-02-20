@@ -1,5 +1,5 @@
-ticks = 20                   # frame par seconde
-vitesse_du_jeu = 6         # vitesse du jeu
+ticks = 20              # frame par seconde
+vitesse_du_jeu = 4      # vitesse du jeu
 temps_par_phase = 30        #temps de chaque phase par équipe en seconde
 longueur_terrain = 30
 largeur_terrain = 20
@@ -25,7 +25,7 @@ positions_dom = {
 # Positionnement des joueurs extérieur
 positions_ext = {
     "gardien": (base_x_ext, largeur_terrain // 2),
-    "ailier gauche": (base_x_ext, 1),
+    "ailier gauche": (base_x_ext+15, 1),
     "ailier droit": (base_x_ext, 18),
     "pointe": (base_x_ext,12),
     "demi gauche": (base_x_ext,5),

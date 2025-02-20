@@ -235,10 +235,11 @@ class Match :
 
         for player in equipe :
             if player.poste == "pointe":
-                self.affectations[player] = (config.formations["pointe"][0], config.formations["pointe"][1])
+                self.affectations[player] = (config.formations["pointe"][0]* - self.possesion +15, config.formations["pointe"][1])
 
 
         for poste, position in self.position_disponible.items():
+            position = (position[0] * -self.possesion + 15,position[1])
             joueurs_non_places = [j for j in equipe if j not in self.affectations]
             if not joueurs_non_places:
                 break
@@ -247,10 +248,10 @@ class Match :
             self.affectations[joueur_plus_proche] = position
             print(f"[Affectation] {joueur_plus_proche.nom} ({joueur_plus_proche.poste}) → {poste}")
         if joueur in self.affectations:
-            if position_arrondie != (self.affectations[joueur][0]* -self.possesion + 15,self.affectations[joueur][1]) :
-                return (self.affectations[joueur][0]* -self.possesion + 15,self.affectations[joueur][1])
+            if position_arrondie != (self.affectations[joueur][0],self.affectations[joueur][1]) :
+                return (self.affectations[joueur][0],self.affectations[joueur][1])
             elif (joueur.poste != "pointe") and (joueur.distance_au_point(self.ballon.position[0],self.ballon.position[1])<10):
-                return Match.position_aleatoire((self.affectations[joueur][0]* -self.possesion + 15,self.affectations[joueur][1]),2)
+                return Match.position_aleatoire((self.affectations[joueur][0],self.affectations[joueur][1]),2)
 
 
 
