@@ -25,7 +25,7 @@ positions_dom = {
 # Positionnement des joueurs extérieur
 positions_ext = {
     "gardien": (base_x_ext, largeur_terrain // 2),
-    "ailier gauche": (base_x_ext+15, 1),
+    "ailier gauche": (base_x_ext, 1),
     "ailier droit": (base_x_ext, 18),
     "pointe": (base_x_ext,12),
     "demi gauche": (base_x_ext,5),

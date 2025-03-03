@@ -6,6 +6,7 @@ import config
 import pygame
 from typing import Tuple
 import copy
+import time
 
 
 WHITE = (255, 255, 255)
@@ -27,7 +28,7 @@ class Match :
         self.exterieur = equipe_B
         self.joueurs_dom = JoueursA
         self.joueurs_ext = JoueursB
-        self.chrono = 400
+        self.chrono = 30*config.ticks
         self.ballon = Ballon((0,0))
         self.possesion = 0     # vaut 0 si personne, 1 si équie à dom, et -1 si équipe ext
         self.receveur = None
@@ -35,6 +36,9 @@ class Match :
         self.passe_en_cours = False
         self.delai_passe = 0
         self.possession_precedente =0
+        self.tir_en_cours = False
+        self.score_dom = 0
+        self.score_ext = 0
 
     def lancement_jeu(self) :
         self.placement_initial()
@@ -44,13 +48,13 @@ class Match :
         pygame.init()
 
         # Dimensions de la fenêtre (proportionnelles au terrain FINA 30m x 20m)
-        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Simulation de Water-Polo")
 
         # Boucle de jeu
         running = True
         clock = pygame.time.Clock()
-        self.afficher_terrain(screen)
+        self.afficher_terrain(self.screen)
 
 
         while running:
@@ -62,8 +66,9 @@ class Match :
                 self.action(joueur, self.joueurs_dom)
             for joueur in self.joueurs_ext :
                 self.action(joueur,self.joueurs_ext)
-            self.afficher_terrain(screen)
-            #self.update_chrono_attaque()
+            self.update_chrono_attaque()
+            self.afficher_terrain(self.screen)
+
 
             clock.tick(config.ticks*config.vitesse_du_jeu)
 
@@ -153,9 +158,40 @@ class Match :
         if self.possesion != self.possession_precedente and self.passe_en_cours == False:
             self.reinitialiser_affectations()
             self.possession_precedente = self.possesion
+            self.chrono = 30*config.ticks
         if self.possesion == 1:
             if joueur in self.joueurs_dom :
                 choix = self.choix_joueur(joueur)
+                if choix == 2 :
+                    chance = r.uniform(0, 1)
+                    difficulte = self.tir(joueur)
+                    if chance > 1 - difficulte:
+                        self.tir_en_cours = True
+                        while self.tir_en_cours :
+                            self.deplacement_ballon(joueur,self.position_but_adverse(joueur))
+                            self.afficher_terrain(self.screen)
+                            #time.sleep(0.1)
+                        self.score_dom+=1
+                        print(f"But de {joueur.nom}. Score : {self.domicile} {self.score_dom} - {self.exterieur} {self.score_ext}")
+                        joueur.a_le_ballon = False
+                        self.tir_en_cours = False
+                        self.engagement()
+                        self.reinitialiser_affectations()
+                        time.sleep(2)
+                        for joueur in self.joueurs_ext :
+                            if joueur.poste == "défenseur pointe" :
+                                self.ballon.position = (joueur.position[0],joueur.position[1])
+                                joueur.a_le_ballon = True
+                        self.possesion = -1
+
+                    else:
+                        self.tir_en_cours = True
+                        while self.tir_en_cours :
+                            self.deplacement_ballon(joueur,self.position_gardien_adverse(joueur))
+                            self.afficher_terrain(self.screen)
+                        joueur.a_le_ballon = False
+                        self.chrono =30*config.ticks
+                        self.transferer_possession()
                 if choix == 1 :
                     self.delai_passe = 30
                     self.emetteur = joueur
@@ -174,6 +210,37 @@ class Match :
         elif self.possesion == -1 :
             if joueur in self.joueurs_ext :
                 choix = self.choix_joueur(joueur)
+                if choix == 2 :
+                    chance = r.uniform(0, 1)
+                    difficulte = self.tir(joueur)
+                    if chance > difficulte:
+                        self.tir_en_cours = True
+                        while self.tir_en_cours :
+                            self.deplacement_ballon(joueur,self.position_but_adverse(joueur))
+                            self.afficher_terrain(self.screen)
+                            #time.sleep(0.1)
+                        self.score_ext+=1
+                        print(f"But de {joueur.nom}. Score : {self.domicile} {self.score_dom} - {self.exterieur} {self.score_ext}")
+                        joueur.a_le_ballon = False
+                        self.engagement()
+                        self.reinitialiser_affectations()
+                        time.sleep(2)
+                        for joueur in self.joueurs_dom :
+                            if joueur.poste == "défenseur pointe" :
+                                self.ballon.position = (joueur.position[0],joueur.position[1])
+                                joueur.a_le_ballon = True
+                        self.possesion = 1
+
+                    else:
+                        self.tir_en_cours = True
+                        while self.tir_en_cours :
+                            self.deplacement_ballon(joueur,self.position_gardien_adverse(joueur))
+                            self.afficher_terrain(self.screen)
+                        joueur.a_le_ballon = False
+                        self.chrono =30*config.ticks
+                        self.transferer_possession()
+
+
                 if choix == 1 :
                     self.delai_passe = 30
                     self.emetteur = joueur
@@ -190,36 +257,11 @@ class Match :
                     cible = self.defense(joueur)
                     joueur.mouvement_vers(cible)
 
-        """equipe = self.joueurs_dom if joueur in self.joueurs_dom else self.joueurs_ext
-        adversaires = self.joueurs_ext if joueur in self.joueurs_dom else self.joueurs_dom
-        but_dom = (config.longueur_terrain, config.largeur_terrain/2)
-        but_ext = (0, config.largeur_terrain/2)
-        but = but_dom if joueur in self.joueurs_dom else but_ext
-        # Dictionnaire pour stocker les adversaires déjà attribués
-        if not hasattr(self, 'marquages'):
-            self.marquages = {}
-
-        # Cas spécifique pour le défenseur pointe
-        if joueur.poste == "défenseur pointe":
-            for j in adversaires:
-                if j.poste == "pointe":
-                    self.marquages[joueur] = j  # Assignation unique
-                    return self.placer_entre(j.position,but,0.90)
-
-        # Filtrer les adversaires déjà pris
-        adversaires_disponibles = [j for j in adversaires if j.poste != "gardien" and j.poste != "pointe"and j not in self.marquages.values()]
-
-        # Si plus d'adversaires disponibles, on prend le plus proche
-        if adversaires_disponibles:
-            adversaire = min(adversaires_disponibles, key=lambda j: joueur.distance_au_joueur(j))
-            self.marquages[joueur] = adversaire  # On assigne cet adversaire au joueur
-            return self.placer_entre(adversaire.position,but,0.85)
-
-        # Si tous les adversaires sont déjà assignés, on ne change rien
-        if joueur in self.marquages:
-            return self.placer_entre(self.marquages[joueur].position,but,0.85)
-
-        return (0,0)  # Si aucun adversaire n'est disponible"""
+    def engagement(self):
+        for joueur in self.joueurs_dom :
+            joueur.position = (config.positions_dom[joueur.poste][0]-13,config.positions_dom[joueur.poste][1])
+        for joueur in self.joueurs_ext :
+            joueur.position = (config.positions_ext[joueur.poste][0]+13,config.positions_dom[joueur.poste][1])
 
     def cible_attaque(self, joueur):
         position_arrondie = (round(joueur.position[0]), round(joueur.position[1]))
@@ -227,26 +269,23 @@ class Match :
             equipe = self.joueurs_dom
         else :
             equipe = self.joueurs_ext
-        for j in equipe :
-            if j.poste == "gardien" :
-                equipe.remove(j)
+        equipe_sans_gardien = [j for j in equipe if j.poste != "gardien"]
         if not hasattr(self, 'affectations') or len(self.affectations) == 0:
             self.reinitialiser_affectations()
 
-        for player in equipe :
+        for player in equipe_sans_gardien :
             if player.poste == "pointe":
                 self.affectations[player] = (config.formations["pointe"][0]* - self.possesion +15, config.formations["pointe"][1])
 
 
         for poste, position in self.position_disponible.items():
             position = (position[0] * -self.possesion + 15,position[1])
-            joueurs_non_places = [j for j in equipe if j not in self.affectations]
+            joueurs_non_places = [j for j in equipe_sans_gardien if j not in self.affectations]
             if not joueurs_non_places:
                 break
 
             joueur_plus_proche = min(joueurs_non_places, key=lambda j: j.distance_au_point(position[0],position[1]))
             self.affectations[joueur_plus_proche] = position
-            print(f"[Affectation] {joueur_plus_proche.nom} ({joueur_plus_proche.poste}) → {poste}")
         if joueur in self.affectations:
             if position_arrondie != (self.affectations[joueur][0],self.affectations[joueur][1]) :
                 return (self.affectations[joueur][0],self.affectations[joueur][1])
@@ -257,31 +296,9 @@ class Match :
 
         return joueur.position  # Si aucune position trouvée, le joueur reste en place
 
-
     def reinitialiser_affectations(self):
         self.position_disponible = {poste: pos for poste, pos in config.formations.items() if poste != "pointe"}
         self.affectations = {}
-
-
-
-
-
-
-    """formation = copy.deepcopy(config.formations)
-            for cible_joueur in formation:
-                if cible_joueur != "pointe":
-                    joueur_plus_proche = min(joueurs,key=lambda joueur: joueur.distance_au_point(config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1]))
-                    if joueur.position == joueur_plus_proche.position:
-                        if position_arrondie != (config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1]):
-                            return (config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1])
-                        else:
-                            return Match.position_aleatoire((config.formations[cible_joueur][0] * -self.possesion + 15,config.formations[cible_joueur][1]), 6)
-                    joueurs.remove(joueur_plus_proche)
-
-        raise ValueError(f"Aucune cible trouvée pour {joueur.nom} (poste: {joueur.poste}). Vérifie la formation.")"""
-
-
-
 
     def choix_joueur(self, joueur: Joueur):
         """Détermine l'action du joueur en possession du ballon (passe, tir ou avancer)."""
@@ -291,7 +308,10 @@ class Match :
         # Récupérer les coéquipiers et défenseurs
         equipe = self.joueurs_dom if joueur in self.joueurs_dom else self.joueurs_ext
         adversaires = self.joueurs_ext if joueur in self.joueurs_dom else self.joueurs_dom
-
+        """if joueur.poste != "gardien" :
+            tir = self.resultat_tir(joueur)
+            if tir == True :
+                return 2"""
         # Vérifier les options de passe
         if self.delai_passe == 0 :
             receveurs_potentiels = []
@@ -314,7 +334,7 @@ class Match :
             if receveurs_potentiels:
                 receveurs_potentiels.sort(key=lambda x: (x[1]))   #et proximité
                 self.receveur = receveurs_potentiels[0][0]
-                #print(f" {joueur.nom} passe à {self.receveur.nom} !")
+                print(f" {joueur.nom} passe à {self.receveur.nom} !")
                 return 1
             else :
                 return 0
@@ -351,9 +371,8 @@ class Match :
             self.ballon.position = (self.ballon.position[0] + dx * 0.02, self.ballon.position[1] + dy * 0.02)  # Mise à jour de la position
             return True
 
+    def update_chrono_attaque(self):
 
-    """def update_chrono_attaque(self):
-        Met à jour le chrono d'attaque et force un changement de possession si 0
         if self.chrono > 0:
             self.chrono -= 1
         else:
@@ -361,8 +380,11 @@ class Match :
             self.transferer_possession()
 
     def transferer_possession(self):
-        Donne le ballon au défenseur le plus proche de l'attaquant
         joueur_actuel = next((j for j in self.joueurs_dom + self.joueurs_ext if j.a_le_ballon), None)
+        if self.possesion == 1 :
+            self.possesion = -1
+        elif self.possesion == -1 :
+            self.possesion = 1
 
         if joueur_actuel:
             joueur_actuel.a_le_ballon = False  # L'attaquant perd le ballon
@@ -376,11 +398,12 @@ class Match :
             defenseur_proche = min(joueurs_defenseurs, key=lambda d: d.distance_au_joueur(joueur_actuel))
 
             # Nouveau porteur du ballon
+            defenseur_proche.mouvement_vers(self.ballon.position)
+            self.recup_ballon(defenseur_proche)
+            self.ballon.position = defenseur_proche.position
             defenseur_proche.a_le_ballon = True
-            self.ballon = defenseur_proche.position
-            self.chrono = 30  # Réinitialisation du chrono pour la nouvelle équipe
-            print(f"🎯 {defenseur_proche.nom} récupère le ballon et la contre-attaque commence !")"""
-
+            self.chrono = 30*config.ticks  # Réinitialisation du chrono pour la nouvelle équipe
+            print(f"🎯 {defenseur_proche.nom} récupère le ballon et la contre-attaque commence !")
 
     def defense(self, joueur):
         equipe = self.joueurs_dom if joueur in self.joueurs_dom else self.joueurs_ext
@@ -420,5 +443,59 @@ class Match :
         y = but_pos[1] + facteur * (adversaire_pos[1] - but_pos[1])
         return (x, y)
 
+    def tir(self, joueur):
+        but_dom = (config.longueur_terrain, config.largeur_terrain/2)
+        but_ext = (0, config.largeur_terrain/2)
+        if joueur in self.joueurs_dom :
+            for j in self.joueurs_ext :
+                if j.poste=="gardien" :
+                    gardien_adverse = j
+        else :
+            for j in self.joueurs_dom :
+                if j.poste=="gardien" :
+                    gardien_adverse = j
 
+        but = but_ext if joueur in self.joueurs_dom else but_dom
 
+        distance_au_but = joueur.distance_au_point(but[0],but[1])
+        angle_but = abs(math.atan2(but[1] - joueur.position[1], but[0] - joueur.position[0]))
+        max_distance = config.longueur_terrain
+        max_angle = math.pi / 2
+
+        facteur_puissance = max(0.5, 1 - joueur.puissance / 100)
+        facteur_precision = max(0.5, 1 - joueur.precision / 100)
+        impact_gardien = gardien_adverse.arret / 100
+
+        difficulte_distance = (distance_au_but / max_distance) * facteur_puissance
+        difficulte_angle = (1 - (angle_but / max_angle)) * facteur_precision
+
+        difficulte = (0.4 * difficulte_distance) + (0.3 * difficulte_angle) + (0.3 * impact_gardien)
+        difficulte = min(1, max(0, difficulte))
+
+        return difficulte
+
+    def resultat_tir(self,joueur):
+        difficulte_tir = self.tir(joueur)
+        if difficulte_tir <= 0.5:
+            return True
+        return False
+
+    def deplacement_ballon(self,depart,arrivee):
+
+        dx, dy =  (arrivee.position[0]-self.ballon.position[0]), (arrivee[1]-self.ballon.position[1])
+        distance = (dx**2 + dy**2) ** 0.5
+
+        if distance < 0.75 :
+            self.ballon.position = arrivee
+            self.tir_en_cours = False
+            return False
+        else :
+            dx, dy = dx / distance, dy / distance  # Normalisation
+            self.ballon.position = (self.ballon.position[0] + dx * 0.01, self.ballon.position[1] + dy * 0.01)  # Mise à jour de la position
+            return True
+
+    def position_but_adverse(self,joueur):
+        if joueur in self.joueurs_dom :
+            return (0,15)
+        else :
+            return (30,15)

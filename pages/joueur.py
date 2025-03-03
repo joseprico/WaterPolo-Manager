@@ -5,14 +5,16 @@ import random as r
 import math
 
 class Joueur:
-    def __init__(self, nom, equipe, poste, position, endurance, precision_tir, agressivite):
+    def __init__(self, nom, equipe, poste, position, endurance, precision_tir, agressivite,puissance,arret):
         self.nom = nom
         self.equipe = equipe
         self.poste = poste  # "gardien", "pointe", "ailier gauche", "ailier droit", "demi gauche", "demi droit", "défenseur pointe"
         self.position = position  # (x, y) sur le terrain
         self.endurance = endurance
-        self.precision_tir = precision_tir
+        self.precision = precision_tir
         self.agressivite = agressivite
+        self.puissance = puissance
+        self.arret = arret
         self.a_le_ballon = False
         self.exclu_pour = 0  # Durée de l’exclusion en ticks
         self.vitesse = 0,0              #vitesse du joueur en x et y
